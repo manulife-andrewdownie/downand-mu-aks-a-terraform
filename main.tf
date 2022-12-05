@@ -132,7 +132,25 @@ diagnostic_settings = [{
   network_acls = {
     default_action             = "Deny"                      # (Required) The Default Action to use when no rules match from ip_rules / virtual_network_subnet_ids. Possible values are Allow and Deny.
     bypass                     = "AzureServices"             # (Required) Specifies which traffic can bypass the network rules. Possible values are AzureServices and None.
-    ip_rules                   = [var.allow_ip_cidr]         # (Optional) IPs or CIDRs which should be able to access this Key Vault.
+    ip_rules                   =  [
+      "104.209.126.22",
+      "104.209.117.22",
+      "52.228.44.236",
+      "52.228.44.171",
+      "40.82.191.190",
+      "40.82.186.241",
+      "40.76.54.131",
+      "52.176.6.30",
+      "52.169.50.45",
+      "52.187.184.26",
+      "52.229.127.48",
+      "52.229.126.233",
+      "40.80.250.5",
+      "40.80.250.70",
+      "165.225.208.0/23",
+      "165.225.212.0/23",
+      "136.226.77.0/24"
+    ]
     virtual_network_subnet_ids = [module.existing_subnet.id] # (Optional) One or more Subnet ID's which should be able to access this Key Vault.
   }
 
