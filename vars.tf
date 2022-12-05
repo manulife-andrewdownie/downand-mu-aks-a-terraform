@@ -30,6 +30,11 @@ variable "allow_ip_cidr" {
   default     = "165.225.208.0/23"
 }
 
+variable "alias" {
+  description = "Environment alias. CAC or CAE."
+  type        = string
+}
+
 variable "application_name" {
   description = "The name of the application being deployed."
   type        = string
@@ -57,4 +62,14 @@ variable "environment" {
 variable "location" {
   description = "Azure region to provision the resources in ie. Canada Central."
   type        = string
+}
+
+variable "private_endpoint_subnet" {
+  description = "Existing subnet for the Private End Point to use."
+  type        = any
+  default = {
+    resource_group_name = ""
+    virtual_network_name = ""
+    subnet_name  = ""
+  }
 }

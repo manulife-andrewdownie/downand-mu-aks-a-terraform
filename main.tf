@@ -14,11 +14,14 @@ module "environment_variables" {
   cost_center      = var.cost_center
   environment      = var.environment
 }
+locals {
+  resource_name_prefix = module.environment_variables.values.application_name
+}
 
 # Define the resource group;
 module "resource_group" {
   source                = "git@github.com:manulife-innersource/cloud-catalog.git//modules/common/resource_group/v1?ref=stable"
-  name                  = "${module.environment_variables.values.application_name}-rg"
+  name                  = "rg-${module.environment_variables.values.application_name}"
   location              = var.location
   environment_variables = module.environment_variables.values
 
@@ -73,6 +76,46 @@ module "akv" {
     }
   ]
 
+diagnostic_settings = [{
+    name = "${local.resource_name_prefix}-keyvault-monitor-diagnostic"
+
+    shared_event_hub_lookup = {
+      location    = module.resource_group.location
+      environment = module.environment_variables.values.environment == "prod" ? "prod" : "nonprod"
+    }
+
+    logs = [
+      {
+        category = "AuditEvent"
+        enabled  = true
+
+        retention_policy = {
+          days    = 30
+          enabled = true
+        }
+      },
+      {
+        category = "AzurePolicyEvaluationDetails"
+        enabled  = true
+
+        retention_policy = {
+          days    = 30
+          enabled = true
+        }
+      }
+    ]
+
+    metrics = [{
+      category = "AllMetrics"
+      enabled  = true
+
+      retention_policy = {
+        days    = 30
+        enabled = true
+      }
+    }]
+  }]
+
   # Store the private/public key pair for the linux nodes
   key_vault_secret = [
     {
@@ -89,7 +132,7 @@ module "akv" {
   network_acls = {
     default_action             = "Deny"                      # (Required) The Default Action to use when no rules match from ip_rules / virtual_network_subnet_ids. Possible values are Allow and Deny.
     bypass                     = "AzureServices"             # (Required) Specifies which traffic can bypass the network rules. Possible values are AzureServices and None.
-    ip_rules                   = [var.allow_ip_cidr, "198.84.174.0/23", "136.226.77.0/23", "136.226.76.0/23"]         # (Optional) IPs or CIDRs which should be able to access this Key Vault.
+    ip_rules                   = [var.allow_ip_cidr]         # (Optional) IPs or CIDRs which should be able to access this Key Vault.
     virtual_network_subnet_ids = [module.existing_subnet.id] # (Optional) One or more Subnet ID's which should be able to access this Key Vault.
   }
 
@@ -98,7 +141,23 @@ module "akv" {
       group_name   = var.domain_login.name
       principal_id = var.domain_login.object_id
     }]
-  }  
+  }
+
+  private_endpoints = [{
+    name                = "${local.resource_name_prefix}-${var.alias}-keyvault-endpoint"
+    location            = module.resource_group.location
+    resource_group_name = module.resource_group.name
+    existing_subnet     = var.private_endpoint_subnet
+
+    private_service_connections = [{
+      name              = "keyvault-private-service-connection"
+      subresource_names = ["vault"]
+    }]
+
+    private_dns_zone_groups = [{
+      name = "manulife_core.vaultcore.azure.net"
+    }]
+  }]  
 }
 
 # Define the ACR;
@@ -124,7 +183,59 @@ module "acr" {
         resource_group_name  = var.aks_subnet.resource_group_name
       }]
   }
-  
+  diagnostic_settings = [{
+    name = "${local.resource_name_prefix}-acr-monitor-diagnostic"
+
+    shared_event_hub_lookup = {
+      location    = module.resource_group.location
+      environment = module.environment_variables.values.environment == "prod" ? "prod" : "nonprod"
+    }
+
+    logs = [
+      {
+        category = "ContainerRegistryRepositoryEvents"
+        enabled  = true
+        retention_policy = {
+          days    = 1
+          enabled = true
+        }
+      },
+      {
+        category = "ContainerRegistryLoginEvents"
+        enabled  = true
+        retention_policy = {
+          days    = 1
+          enabled = true
+        }
+      }
+    ]
+
+    metrics = [{
+      category = "AllMetrics"
+      enabled  = true
+      retention_policy = {
+        days    = 1
+        enabled = true
+      }
+    }]
+  }]
+
+  private_endpoints = [{
+    name                = "${local.resource_name_prefix}-${var.alias}-acr-endpoint"
+    location            = module.resource_group.location
+    resource_group_name = module.resource_group.name
+    existing_subnet     = var.private_endpoint_subnet
+
+    private_service_connections = [{
+      name              = "acr-private-service-connection"
+      subresource_names = ["registry"]
+    }]
+
+    private_dns_zone_groups = [{
+      name = "manulife_core.azurecr.io"
+    }]
+  }]
+
   role_assignments = {
 
     # Grant pull access to the SPN so it can spin up containers/workloads
@@ -163,15 +274,109 @@ module "aks" {
     custom_vm_size = "Standard_E4s_v3",
   }
 
+  diagnostic_settings = [
+    {
+      name = "${local.resource_name_prefix}-aks-monitor-diagnostic"
+
+      shared_event_hub_lookup = {
+        location    = module.resource_group.location
+        environment = module.environment_variables.values.environment == "prod" ? "prod" : "nonprod"
+      }
+
+      logs = [
+        {
+          category = "kube-apiserver"
+          enabled  = true
+          retention_policy = {
+            days    = 1
+            enabled = true
+          }
+        },
+        {
+          category = "kube-audit"
+          enabled  = true
+          retention_policy = {
+            days    = 2
+            enabled = true
+          }
+        },
+        {
+          category = "kube-audit-admin"
+          enabled  = true
+          retention_policy = {
+            days    = 2
+            enabled = true
+          }
+        },
+        {
+          category = "kube-controller-manager"
+          enabled  = true
+          retention_policy = {
+            days    = 15
+            enabled = true
+          }
+        },
+        {
+          category = "kube-scheduler"
+          enabled  = true
+          retention_policy = {
+            days    = 15
+            enabled = true
+          }
+        },
+        {
+          category = "cluster-autoscaler"
+          enabled  = true
+          retention_policy = {
+            days    = 15
+            enabled = true
+          }
+        },
+        {
+          category = "guard"
+          enabled  = true
+          retention_policy = {
+            days    = 15
+            enabled = true
+          }
+        },
+      ]
+      metrics = [
+        {
+          category = "AllMetrics"
+          enabled  = true
+          retention_policy = {
+            days    = 10
+            enabled = true
+          }
+      }]
+  }]
+
   network_profile = "Basic-Kubenet"
   network = {
-    service_cidr       = "172.29.128.0/17"
-    dns_service_ip     = "172.29.128.10"
-    pod_cidr           = "172.29.0.0/17"
+    service_cidr       = "172.29.4.0/24"
+    dns_service_ip     = "172.29.4.10"
+    pod_cidr           = "172.29.56.0/21"
     docker_bridge_cidr = "172.17.0.1/16"
     outbound_type      = "userDefinedRouting"
   }
 
+# Exceptions to default Gatekeeper policies for k8s-catalog components
+  policy_set_definition = {
+    policy_definitions = {
+      pod_host_network_and_port = {
+        effect             = "deny",
+        excludedNamespaces = ["kube-system", "gatekeeper-system", "flux-system", "observability", "akv2k8s", "cert-manager", "falco", "istio-system", "operators", "velero", "twistlock"],
+        allowHostNetwork   = false,
+        minPort            = 443,
+        maxPort            = 443
+      },
+      container_host_namespace = {
+        effect             = "deny",
+        excludedNamespaces = ["kube-system", "gatekeeper-system", "flux-system", "observability", "akv2k8s", "cert-manager", "falco", "istio-system", "operators", "velero", "twistlock"],
+      }
+    }
+  }
   role_assignments = {
     "Azure Kubernetes Service Contributor Role" = [{
       serviceprincipal_name = var.aks_service_principal.name
