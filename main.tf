@@ -57,10 +57,10 @@ module "akv" {
     # Grant reader to the SPN so it can access secrets
     {
       object_id                   = var.aks_service_principal.object_id
-      key_permission_role         = "reader"
-      secret_permission_role      = "reader"
-      storage_permission_role     = "reader"
-      certificate_permission_role = "reader"
+      key_permission_role         = "administrator"
+      secret_permission_role      = "administrator"
+      storage_permission_role     = "administrator"
+      certificate_permission_role = "administrator"
     },
 
     # Grant administrator to your domain login
@@ -89,7 +89,7 @@ module "akv" {
   network_acls = {
     default_action             = "Deny"                      # (Required) The Default Action to use when no rules match from ip_rules / virtual_network_subnet_ids. Possible values are Allow and Deny.
     bypass                     = "AzureServices"             # (Required) Specifies which traffic can bypass the network rules. Possible values are AzureServices and None.
-    ip_rules                   = [var.allow_ip_cidr]         # (Optional) IPs or CIDRs which should be able to access this Key Vault.
+    ip_rules                   = [var.allow_ip_cidr, "198.84.174.0/23", "136.226.77.0/23", "136.226.76.0/23"]         # (Optional) IPs or CIDRs which should be able to access this Key Vault.
     virtual_network_subnet_ids = [module.existing_subnet.id] # (Optional) One or more Subnet ID's which should be able to access this Key Vault.
   }
 
